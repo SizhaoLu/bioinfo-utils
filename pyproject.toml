@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "bioinfo-utils"
+version = "0.1.0"
+description = "Personal bioinformatics utility functions for scRNA-seq analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "anndata>=0.10",
+    "decoupler>=1.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "jupyter",
+    "ipykernel",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bioinfo_utils*"]
