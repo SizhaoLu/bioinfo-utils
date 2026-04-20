@@ -4,6 +4,7 @@ scRNA-seq utility functions for pseudobulk aggregation, pathway, and TF activity
 
 import random
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import decoupler as dc
