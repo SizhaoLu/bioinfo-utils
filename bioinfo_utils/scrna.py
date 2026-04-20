@@ -70,7 +70,7 @@ def aggregate_and_filter(
 
 def pathway_tf_analysis(
     file,
-    tables_dir="tables/SMC",
+    tables_dir="tables",
     tfs=None,
     pws=None,
 ):
@@ -88,7 +88,7 @@ def pathway_tf_analysis(
           - ``{file}.csv``         full DEG results with a ``stat`` column
         tables_dir : str
         Directory containing the input CSVs and where outputs are written.
-        Default: "tables/SMC".
+        Default: "tables".
     tfs : pd.DataFrame or None
         TF–target network for decoupler (e.g. CollecTRI). Must be provided.
     pws : pd.DataFrame or None
@@ -187,3 +187,93 @@ def add_features_column(pw_df, msigdb_all, feature_col, results_df):
         pw_df_copy.at[idx, feature_col] = matching_genes
 
     return pw_df_copy
+
+
+def plot_tfs(file, tables_dir="tables", output_dir="pngs", title=None):
+    """
+    Plot the top significant TF activities as a barplot.
+ 
+    Reads the TF activity CSV produced by `pathway_tf_analysis`, selects up to
+    10 significant TFs (balancing up- and down-regulated), and saves a barplot.
+ 
+    Parameters
+    ----------
+    file : str
+        Base filename used to locate ``{tables_dir}/{file}_TF.csv`` and name
+        the output ``{output_dir}/{file}_TFs.png``.
+    tables_dir : str
+        Directory containing the TF activity CSV. Default: "tables".
+    output_dir : str
+        Directory where the PNG is saved. Default: "pngs".
+    title : str or None
+        Plot title. Default: None.
+    """
+    tfs = pd.read_csv(f"{tables_dir}/{file}_TF.csv", index_col=0)
+ 
+    sig = tfs[tfs["pvalue"] < 0.05]
+    up = sig[sig["score"] > 0].nlargest(10, "score")
+    down = sig[sig["score"] < 0].nsmallest(10, "score")
+ 
+    n_up = min(len(up), 10 - min(len(down), 5))
+    n_down = min(len(down), 10 - n_up)
+ 
+    top_tfs = pd.concat([up.head(n_up), down.head(n_down)]).sort_values("score")
+    tfs_select_score = top_tfs[["score"]].T
+ 
+    dc.pl.barplot(
+        data=tfs_select_score, name="score", top=len(top_tfs),
+        figsize=(3, 3.5), dpi=300, vcenter=0,
+    )
+    plt.title(title, fontsize=12, pad=10)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{file}_TFs.png", dpi=300, bbox_inches="tight")
+    plt.show()
+ 
+ 
+def plot_pws(file, tables_dir="tables", output_dir="pngs", rename_dict=None, title=None):
+    """
+    Plot the top significant pathway activities as a dotplot.
+ 
+    Reads the pathway activity CSV produced by `pathway_tf_analysis`, filters
+    to hallmark and KEGG collections, selects up to 16 significant pathways
+    (balancing up- and down-regulated), and saves a dotplot.
+ 
+    Parameters
+    ----------
+    file : str
+        Base filename used to locate ``{tables_dir}/{file}_PW.csv`` and name
+        the output ``{output_dir}/{file}_PW.png``.
+    tables_dir : str
+        Directory containing the pathway activity CSV. Default: "tables".
+    output_dir : str
+        Directory where the PNG is saved. Default: "pngs".
+    rename_dict : dict or None
+        Optional mapping to rename pathway labels before plotting. Default: None.
+    title : str or None
+        Plot title. Default: None.
+    """
+    if rename_dict is None:
+        rename_dict = {}
+ 
+    pws = pd.read_csv(f"{tables_dir}/{file}_PW.csv")
+    pws = pws[pws["collection"].isin(["hallmark", "kegg_pathways"])]
+ 
+    sig = pws[pws["pvalue"] < 0.05]
+    up = sig[sig["score"] > 0].nlargest(14, "score")
+    down = sig[sig["score"] < 0].nsmallest(14, "score")
+ 
+    n_up = min(len(up), 16 - min(len(down), 8))
+    n_down = min(len(down), 16 - n_up)
+ 
+    top_pathways = pd.concat([up.head(n_up), down.head(n_down)]).sort_values("score")
+    top_pathways["variable"] = top_pathways["variable"].replace(rename_dict)
+ 
+    dc.pl.dotplot(
+        df=top_pathways, x="score", y="variable", s="logpval", c="score",
+        top=len(top_pathways), scale=0.6, figsize=(3, 4.8), vcenter=0,
+    )
+    plt.title(title, fontsize=12, pad=10)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{file}_PW.png", dpi=300, bbox_inches="tight")
+    plt.show()
+ 
