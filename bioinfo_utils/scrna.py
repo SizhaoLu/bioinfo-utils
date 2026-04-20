@@ -86,9 +86,7 @@ def pathway_tf_analysis(
         Base filename (without extension) used to locate input CSVs and name outputs.
         Expects the following files under `tables_dir`:
           - ``{file}.csv``         full DEG results with a ``stat`` column
-          - ``{file}_filter15.csv``  DEGs filtered at 1.5 FC
-          - ``{file}_filter20.csv``  DEGs filtered at 2.0 FC
-    tables_dir : str
+        tables_dir : str
         Directory containing the input CSVs and where outputs are written.
         Default: "tables/SMC".
     tfs : pd.DataFrame or None
@@ -107,9 +105,10 @@ def pathway_tf_analysis(
         raise ValueError("`tfs` and `pws` network DataFrames must be provided.")
 
     results_df = pd.read_csv(f"{tables_dir}/{file}.csv", index_col=0)
-    results_df_filter_fc15 = pd.read_csv(f"{tables_dir}/{file}_filter15.csv", index_col=0)
-    results_df_filter_fc20 = pd.read_csv(f"{tables_dir}/{file}_filter20.csv", index_col=0)
-
+    results_df_filter_pv = results_df[results_df['padj'] < 0.05]
+    results_df_filter_fc15 = results_df_filter_pv[(results_df_filter_pv['log2FoldChange'] > 0.58496250072) | (results_df_filter_pv['log2FoldChange'] < -0.58496250072)]
+    results_df_filter_fc20 = results_df_filter_pv[(results_df_filter_pv['log2FoldChange'] > 1) | (results_df_filter_pv['log2FoldChange'] < -1)]
+    
     data = results_df[["stat"]].T
 
     # --- TF activity ---
