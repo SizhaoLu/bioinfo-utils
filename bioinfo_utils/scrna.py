@@ -68,26 +68,24 @@ def aggregate_and_filter(
     adata.obs[rep_key] = adata.obs[rep_key].astype("category")
     return adata
 
-
 def pathway_tf_analysis(
     file,
     tables_dir="tables",
     tfs=None,
     pws=None,
+    annotation=None,
 ):
     """
     Run TF and pathway activity scoring on DEG statistics using decoupler.
-
     Reads pre-computed DEG result CSVs, scores TF and pathway activity via
     univariate linear model (ULM), and writes the results back to CSV.
-
     Parameters
     ----------
     file : str
         Base filename (without extension) used to locate input CSVs and name outputs.
         Expects the following files under `tables_dir`:
           - ``{file}.csv``         full DEG results with a ``stat`` column
-        tables_dir : str
+    tables_dir : str
         Directory containing the input CSVs and where outputs are written.
         Default: "tables".
     tfs : pd.DataFrame or None
@@ -95,7 +93,12 @@ def pathway_tf_analysis(
     pws : pd.DataFrame or None
         Pathway–gene network for decoupler (e.g. MSigDB). Must be provided.
         Expected columns: ``source``, ``target``, ``collection``.
-
+    annotation : pd.DataFrame or None
+        Optional. DataFrame with Ensembl IDs as index and a "GeneSymbol" column.
+        If provided and the index of the DEG table contains Ensembl IDs
+        (i.e. start with "ENS"), the index will be converted to gene symbols.
+        Duplicate gene symbols are resolved by keeping the row with the highest
+        absolute stat value. Default: None.
     Returns
     -------
     tuple[pd.DataFrame, pd.DataFrame]
@@ -104,12 +107,37 @@ def pathway_tf_analysis(
     """
     if tfs is None or pws is None:
         raise ValueError("`tfs` and `pws` network DataFrames must be provided.")
-
-    results_df = pd.read_csv(f"{tables_dir}/{file}.csv", index_col=0)
-    results_df_filter_pv = results_df[results_df['padj'] < 0.05]
-    results_df_filter_fc15 = results_df_filter_pv[(results_df_filter_pv['log2FoldChange'] > 0.58496250072) | (results_df_filter_pv['log2FoldChange'] < -0.58496250072)]
-    results_df_filter_fc20 = results_df_filter_pv[(results_df_filter_pv['log2FoldChange'] > 1) | (results_df_filter_pv['log2FoldChange'] < -1)]
     
+    results_df = pd.read_csv(f"{tables_dir}/{file}.csv", index_col=0)
+
+    # --- Ensembl ID to Gene Symbol conversion ---
+    if annotation is not None and results_df.index.str.startswith("ENS").any():
+        results_df = (
+            results_df
+            .join(annotation[["GeneSymbol"]], how="left")                  # map Ensembl → symbol
+            .assign(GeneSymbol=lambda x: x["GeneSymbol"].fillna(x.index))  # keep Ensembl ID if no match
+            .set_index("GeneSymbol")                                        # swap index
+        )
+        # Remove duplicate gene symbols: keep row with highest absolute stat
+        results_df = (
+            results_df
+            .assign(_abs_stat=lambda x: x["stat"].abs())
+            .sort_values("_abs_stat", ascending=False)
+            .loc[~results_df.index.duplicated(keep="first")]
+            .drop(columns="_abs_stat")
+        )
+        results_df.index.name = None
+
+    results_df_filter_pv = results_df[results_df['padj'] < 0.05]
+    results_df_filter_fc15 = results_df_filter_pv[
+        (results_df_filter_pv['log2FoldChange'] > 0.58496250072) |
+        (results_df_filter_pv['log2FoldChange'] < -0.58496250072)
+    ]
+    results_df_filter_fc20 = results_df_filter_pv[
+        (results_df_filter_pv['log2FoldChange'] > 1) |
+        (results_df_filter_pv['log2FoldChange'] < -1)
+    ]
+
     data = results_df[["stat"]].T
 
     # --- TF activity ---
@@ -132,13 +160,11 @@ def pathway_tf_analysis(
         right_on="source",
         how="left",
     ).drop(columns="source")
-
     pw_df = add_features_column(pw_df, pws, "features with 1.5 FC", results_df_filter_fc15)
     pw_df = add_features_column(pw_df, pws, "features with 2 FC", results_df_filter_fc20)
     pw_df.to_csv(f"{tables_dir}/{file}_PW.csv", index=False)
 
     return tf_df, pw_df
-
 
 def add_features_column(pw_df, msigdb_all, feature_col, results_df):
     """
