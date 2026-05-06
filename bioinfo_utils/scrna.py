@@ -115,7 +115,7 @@ def pathway_tf_analysis(
         results_df = (
             results_df
             .join(annotation[["GeneSymbol"]], how="left")                  # map Ensembl → symbol
-            .assign(GeneSymbol=lambda x: x["GeneSymbol"].fillna(x.index))  # keep Ensembl ID if no match
+            .assign(GeneSymbol=lambda x: x["GeneSymbol"].fillna(pd.Series(x.index, index=x.index)))
             .set_index("GeneSymbol")                                        # swap index
         )
         # Remove duplicate gene symbols: keep row with highest absolute stat
